@@ -541,15 +541,22 @@ class RebelCoverage_Add(Resource):
 		args = rc_put_args.parse_args()
 		#print(args)
 		start_date, end_date = DupCheck(RebelCoverage, args['startDate'], args['endDate'], args['name'], args['startTime'])
+		start_time = format_time(args.get('startTime'))
+		try:
+			sTime = datetime.strptime(start_time, "%I:%M %p")
+			eTime = sTime + timedelta(hours=3)
+			end_time = eTime.strftime("%#I:%M %p")
+		except Exception:
+			end_time = ""
 		if not start_date:
 			abort(HTTPStatus.CONFLICT, message="Event already exists...")
 
 		event = RebelCoverage(
 			name=args['name'],
             startDate=start_date,
-            startTime=format_time(args.get('startTime')),
+            startTime=start_time,
             endDate=end_date,
-            endTime=format_time(args.get('endTime')),
+            endTime=end_time,
 			location=args.get('location'),
 			sport=args.get('sport'),
             link=args.get('link')

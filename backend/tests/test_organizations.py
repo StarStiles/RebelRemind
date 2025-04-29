@@ -154,6 +154,8 @@ class TestOrgScraperAPI(unittest.TestCase):
             except Exception as e:
                 print(f"Could not delete {db_path}: {e}")
 
-if __name__ == '__main__':
-    # Ensure the script using this test class is run directly
+def default():
     unittest.main()
+
+if __name__ == '__main__':
+    default()

@@ -217,3 +217,9 @@ def test_dupcheck_variants(app, table_cls, startDate, endDate, name, startTime, 
             assert result == (False, False)
         else:
             assert isinstance(result, tuple)
+
+def default():
+    pytest.main([__file__])
+
+if __name__ == '__main__':
+    default()
