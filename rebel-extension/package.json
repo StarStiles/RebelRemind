@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "jest --coverage"
+    "test": "jest --coverage",
+    "test:no-notifications": "jest --coverage --testPathIgnorePatterns=notification.test.js"
   },
   "dependencies": {
     "bootstrap": "^5.3.3",
@@ -21,6 +22,7 @@
     "react-dom": "^19.0.0",
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.4.0",
+    "react-shadow": "^20.6.0",
     "react-switch": "^7.1.0",
     "styled-components": "^6.1.16"
   },

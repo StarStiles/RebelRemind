@@ -14,8 +14,8 @@
 import { authenticateUser } from "./scripts/identity-script.js";
 import { getAssignments, getCourses, getCanvasPAT } from "./scripts/canvas-script.js";
 import { openSidePanel } from "./scripts/sidepanel.js";
-import { fetchEvents } from "./scripts/fetch-events.js";
-import { checkDailyTask } from "./scripts/check-daily-login.js";
+import { getGoogleToken, syncCalendar, getCalendarID, getOrCreateCalendar, gatherEvents, checkCalendarExists } from "./scripts/GoogleCalendar.js";
+import { alarmInstall, storageListener, chromeStartUpListener, dailyAlarmListener, onClickNotification} from "./scripts/notifications.js";
 
 
 /**
@@ -23,7 +23,7 @@ import { checkDailyTask } from "./scripts/check-daily-login.js";
 */
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name == "getAssignments") { // alarm is triggered, update storage with new assignments
-    fetchCanvasAssignments();
+    updateAssignments();
   }
 });
 
@@ -42,208 +42,19 @@ chrome.alarms.onAlarm.addListener((alarm) => {
  */
 
 //region notif
-let notificationState = false; // Default value
-chrome.storage.sync.get("notificationsEnabled", (data) => {
-  if (data && data.notificationsEnabled !== undefined) {
-    notificationState = data.notificationsEnabled;
-  } else {
-    notificationState = false;
-  }
-});
-
-
-function getNextNineAM() {
-  const now = new Date();
-  const next = new Date();
-  next.setHours(9, 0, 0, 0);
-  if (now > next) {
-    next.setDate(next.getDate() + 1); // schedule for tomorrow
-  }
-  return next.getTime();
-}
-
 // Initialize from storage on extension startup
+chrome.runtime.onInstalled.addListener(alarmInstall);
 
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("Extension installed: Create alarm");
-
-  chrome.alarms.create("dailyCheck", {
-    when: getNextNineAM(),
-    periodInMinutes: 1440 //24 hours
-    // periodInMinutes: 1 //24 hours
-  });
-});
-
-
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "sync" && changes.notificationsEnabled){
-    // Utility to calculate the next 9:00 AM time
-    notificationState = changes.notificationsEnabled.newValue;
-    if (notificationState){
-      console.log("Notify from changed preferences")
-      handleDailyTask();
-    }
-  }
-});
-
+chrome.storage.onChanged.addListener(storageListener);
 
 // Run logic when Chrome starts (fallback if alarm missed)
-chrome.runtime.onStartup.addListener(() => {
-  const currentHour = new Date().getHours();
-  console.log("Chrome started at", currentHour);
-  if (currentHour >= 9) {
-    console.log("Notify from chrome startup")
-    handleDailyTask(true); // after 9am is true
-  }
-});
+chrome.runtime.onStartup.addListener(chromeStartUpListener);
 
 // Respond to the daily alarm
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "dailyCheck") {
-    console.log("Notify daily 9am")
-    handleDailyTask();
-  }
-});
+chrome.alarms.onAlarm.addListener(dailyAlarmListener);
 
 // Core function to handle daily task logic
-async function handleDailyTask(isStartup = false) {
-  try {
-    const shouldRun = await checkDailyTask();
-    const currentHour = new Date().getHours();
-
-    // Only run if the task hasn't already run, and it's after 9AM (if startup fallback)
-    if (shouldRun && (isStartup || currentHour >= 9)) {
-      console.log("Triggering daily task");
-
-      const fetchAssignments = async () => {
-        return new Promise((resolve) => {
-          chrome.storage.local.get("Canvas_Assignments", (data) => {
-            if (Array.isArray(data.Canvas_Assignments)) {
-              resolve(data.Canvas_Assignments);
-            } else {
-              resolve([]);
-            }
-          });
-        });
-      };
-      
-      const assignmentList = await fetchAssignments();
-
-      //Constants do not touch
-      const now = new Date();
-      const todayForFetching = now.toLocaleDateString('en-CA')
-      const filterToday = (arr) =>
-        safeArray(arr).filter(event => {
-          if (!event.startDate || !event.startTime) return false;
-
-          const isAllDay = event.startTime === "(ALL DAY)";
-          if (event.startDate !== todayForFetching) return false;
-          if (isAllDay) return true;
-          
-          const dateTime = new Date(`${event.startDate} ${event.startTime}`); 
-          return dateTime > now;
-        });
-      const filterTodayCanvas = (arr) =>
-        safeArray(arr).filter(item => {
-          if (!item.due_at) return false;
-      
-          const dueDate = new Date(item.due_at);
-          const localDateStr = dueDate.toLocaleDateString('en-CA'); 
-          
-          return localDateStr === todayForFetching && dueDate > now;
-        });
-
-      //Basically error check if a response is valid
-      const safeArray = (data) => Array.isArray(data) ? data : [];
-
-      //Check incoming fetched events
-      const [data1, data2, data3, data4] = await fetchEvents(todayForFetching);
-
-      const academiccalendar_daily = filterToday(data1).length;
-      const involvementcenter_daily = filterToday(data2).length;
-      const rebelcoverage_daily = filterToday(data3).length;
-      const unlvcalendar_daily = filterToday(data4).length;
-      const canvas_daily = filterTodayCanvas(assignmentList).length;
-
-      const allEvents = [...safeArray(data1), ...safeArray(data2), ...safeArray(data3), ...safeArray(data4)];
-
-      const eventsToday = academiccalendar_daily + involvementcenter_daily + rebelcoverage_daily + unlvcalendar_daily + canvas_daily > 0;
-      console.log("Events today", eventsToday);
-      const parts = [];
-
-      if (canvas_daily > 0) {
-        parts.push(`${canvas_daily} Canvas ${canvas_daily === 1 ? 'assignment' : 'assignments'}`);
-      }
-
-      if (academiccalendar_daily > 0) {
-        parts.push(`${academiccalendar_daily} Academic ${academiccalendar_daily === 1 ? 'event' : 'events'}`);
-      }
-
-      if (involvementcenter_daily > 0) {
-        parts.push(`${involvementcenter_daily} Involvement Center ${involvementcenter_daily === 1 ? 'event' : 'events'}`);
-      }
-
-      if (rebelcoverage_daily > 0) {
-        parts.push(`${rebelcoverage_daily} Rebel Coverage ${rebelcoverage_daily === 1 ? 'event' : 'events'}`);
-      }
-
-      if (unlvcalendar_daily > 0) {
-        parts.push(`${unlvcalendar_daily} UNLV ${unlvcalendar_daily === 1 ? 'event' : 'events'}`);
-      }
-
-      const dynamicTitle = parts.join(', ');
-
-      if (eventsToday){
-        chrome.notifications.create('', {
-          type: 'basic',
-          iconUrl: chrome.runtime.getURL("images/logo_128x128.png"), // must exist and be declared in manifest.json
-          title: "RebelRemind",
-          message: dynamicTitle,
-          priority: 2
-        }, (notificationId) => {
-          if (chrome.runtime.lastError) {
-            console.error('Notification error:', chrome.runtime.lastError.message);
-          } else {
-            console.log('Notification shown with ID:', notificationId);
-          }
-        });
-      }
-
-    //schema 
-      const notificationData = {
-        id: Date.now().toString(),
-        startDate: todayForFetching,
-        summary: dynamicTitle,
-        events: [
-          ...filterToday(data1).map(e => ({ ...e, source: "Academic" })),
-          ...filterToday(data2).map(e => ({ ...e, source: "Involvement Center" })),
-          ...filterToday(data3).map(e => ({ ...e, source: "Rebel Coverage" })),
-          ...filterToday(data4).map(e => ({ ...e, source: "UNLV Calendar" })),
-          ...filterTodayCanvas(assignmentList).map(e => ({ ...e, source: "Canvas" })),
-        ]
-      };
-    
-    // Push to local store
-      chrome.storage.local.get("notificationHistory", (data) => {
-        const history = Array.isArray(data.notificationHistory) ? data.notificationHistory : [];
-        history.unshift(notificationData);
-        chrome.storage.local.set({ notificationHistory: history.slice(0, 7) }); // Last 7 days
-      });
-
-    } else {
-      console.log("Daily task skipped (already run or too early)");
-    }
-  } catch (error) {
-    console.error("Error during daily task execution:", error);
-  }
-
-}
-
-chrome.notifications.onClicked.addListener((notificationId) => {
-  chrome.tabs.create({
-    url: chrome.runtime.getURL("welcome.html#/notifications")
-  });
-});
+chrome.notifications.onClicked.addListener(onClickNotification);
 //endregion
 
 //endregion
@@ -283,7 +94,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     * Updates the Canvas assignments list that is in storage.
     */
     case "UPDATE_ASSIGNMENTS":
-      fetchCanvasAssignments();
+      updateAssignments();
       break;
 
     /**
@@ -347,6 +158,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
      * Reloads the calendar in side panel to reflect created event.
      */
     case "EVENT_CREATED":
+      chrome.storage.sync.get("preferences", (data) => {
+        if (data.preferences.googleCalendar) {
+            updateGoogleCalendar();
+        }
+      });
       chrome.runtime.sendMessage({ type: "EVENT_CREATED" }); // broadcast
       break;
 
@@ -354,7 +170,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     * Reloads the calendar in side panel to reflect updated event.
     */
     case "EVENT_UPDATED":
-      chrome.runtime.sendMessage({ type: "EVENT_UPDATED" });
+      chrome.storage.sync.get("preferences", (data) => {
+        if (data.preferences.googleCalendar) {
+            updateGoogleCalendar();
+        }
+      });
+      chrome.runtime.sendMessage({ type: "EVENT_UPDATED" }, (response) => {
+        if (chrome.runtime.lastError) {
+          // handle receiving end does not exist error
+        }
+      });
+      break;
+
+    /**
+    * Reloads the Google Calendar with updated data.
+    */
+    case "UPDATE_GOOGLE_CALENDAR":
+      updateGoogleCalendar();
       break;
 
     /**
@@ -371,55 +203,102 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 //region CANVAS
 
+chrome.runtime.onInstalled.addListener(() => {
+  const colorList = { UNLVEvents: "#b10202", InvolvementCenter: "#666666", userEvents: "#0000ff", CanvasCourses: {} };
+  chrome.storage.local.set({ colorList: colorList });
+});
+
 /**
 * Fetches all assignments from Canvas and places them into storage.
 */
 async function fetchCanvasAssignments() {
   console.log("Fetching Assignments");
-  let allAssignments = [];
-  
-  // Await access token before continuing
-  getCanvasPAT().then((accessToken) => {
-    if (!accessToken) {
-      console.log("No access token found.");
+
+  const accessToken = await getCanvasPAT();
+  if (!accessToken) {
+    console.log("No access token found.");
+    return false;
+  }
+
+  try {
+    const courseList = await getCourses(accessToken);
+
+    const assignments = await Promise.all(
+      courseList.map(course => getAssignments(course, accessToken))
+    );
+
+    const allAssignments = assignments.flat();
+    const fetchStatus = { success: true, error: null }; // fetching had no errors
+
+    await new Promise((resolve) => {
+      chrome.storage.local.set({ Canvas_Assignments: allAssignments }, () => {
+        console.log("Assignments Stored!");
+        resolve();
+      });
+    });
+
+    chrome.storage.local.set({ CanvasFetchStatus: fetchStatus });
+    chrome.runtime.sendMessage({ type: "UPDATE_ASSIGNMENTS" }, (response) => {
+      if (chrome.runtime.lastError) {
+        // handle receiving end does not exist error (when popup is closed)
+      }
+    });
+    return true;
+
+  } catch(error) {
+    console.log("Error fetching assignments", error);
+    return false;
+  }
+}
+
+async function updateGoogleCalendar() {
+  console.log("UPDATING CALENDAR");
+  getGoogleToken().then((GoogleToken) => {
+    if (!GoogleToken) {
+      console.log("No chrome identity token found.");
       return false;
     }
 
-    getCourses(accessToken).then((courseList) => {
-      // Loop through the courses and fetch assignments
-      const assignmentPromises = courseList.map((course) =>
-        getAssignments(course, accessToken)
-      );
-      
-      // Wait for all assignments to be fetched
-      Promise.all(assignmentPromises)
-        .then((assignments) => {
-          // Flatten the array
-          allAssignments = assignments.flat();
-          const fetchStatus = { success: true, error: null }; // fetching had no errors
-          chrome.storage.local.set({ Canvas_Assignments: allAssignments }, () => {
-            console.log("Assignments Stored!");
-          });
-          chrome.storage.local.set({ CanvasFetchStatus: fetchStatus });
-          chrome.runtime.sendMessage({ type: "UPDATE_ASSIGNMENTS" }, (response) => {
-            if (chrome.runtime.lastError) {
-              // handle receiving end does not exist error (when popup is closed)
-            }
-          });
-          return true;
+    getCalendarID().then((storedCalendarID) => {
+      if (!storedCalendarID) {
+        getOrCreateCalendar(GoogleToken).then((newCalendarID) => {
+          // do work with newcalendar
+          gatherEvents().then((eventList) => {
+            syncCalendar(eventList, GoogleToken, newCalendarID);
+          })
         })
-        .catch((error) => { // error is logged instead of sending error to Chrome
-          console.log("Error fetching assignments", error);
-          return false;
-        });
-    }).catch((error) => {
-      console.log("Error with getCourses()", error);
-      return false;
-    });
-  }).catch((error) => {
-    console.log("Error fetching access token", error);
-    return false;
+      }
+      else {
+        checkCalendarExists(GoogleToken, storedCalendarID).then((result) => {
+          if (!result) {
+            getOrCreateCalendar(GoogleToken).then((newCalendarID) => {
+              // do work with newcalendar
+              gatherEvents().then((eventList) => {
+                syncCalendar(eventList, GoogleToken, newCalendarID);
+              })
+            })
+          }
+          else {
+            // do work with storedcalendar
+            gatherEvents().then((eventList) => {
+              syncCalendar(eventList, GoogleToken, storedCalendarID);
+            })
+          }
+        })
+      }
+    })
   });
+}
+
+async function updateAssignments() {
+  const success = await fetchCanvasAssignments();
+  if (success) {
+    chrome.storage.sync.get("preferences", (data) => {
+      if (data.preferences.googleCalendar) {
+        updateGoogleCalendar();
+      }
+    });
+  }
 }
 //endregion
 

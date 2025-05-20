@@ -1,0 +1,215 @@
+// Hacky fix for css issues
+function EventsStyle() {
+    return (
+        <>
+            <style>{`
+
+.no-events {
+  text-align: center;
+  color: #888;
+  font-style: italic;
+  margin: 0.5rem 0;
+}
+
+.weekday-title {
+  font-weight: bold;
+  color: #8b0000;
+  margin-bottom: 0.25rem;
+}
+
+.weekday-divider {
+  border-top: 1px solid #ccc;
+  margin-bottom: 0.75rem;
+}
+
+.event-list {
+  padding-left: 1.25rem;
+  margin-bottom: 1rem;
+  padding-left: 1rem !important;
+}
+.event-list-daily {
+  list-style: none !important;
+  padding-left: 0 !important;
+  ::marker {
+    content: none;
+  }
+}
+  .event-item {
+  margin-bottom: 0.5rem;
+  list-style-type: disc;
+  font-size: 16px;
+  font-family: "Lato", "Helvetica", "Arial", sans-serif;
+  color: #212529;
+  display: flex;
+  justify-content: space-between; 
+  gap: 1.5rem;
+  
+}
+
+.event-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  text-decoration: none;       
+  color: inherit;
+:hover {
+      color: #1f1f1f88 !important ;
+  }
+}
+
+.event-name {
+  flex: 1;
+  flex-shrink: 1;
+  white-space: normal;
+  word-break: break-word;
+  width: auto;
+}
+
+.event-org {
+  font-weight: 600;
+}
+
+.event-time {
+  flex-shrink: 0;
+  min-width: 80px;
+  text-align: right;
+  font-weight: 600;
+  font-family: "Lato", "Helvetica", "Arial", sans-serif;
+  display: flex;
+  justify-content: right;
+}
+
+.showCompletedCheckbox {
+  visibility: hidden;
+}
+
+.completedText {
+  cursor: pointer;
+  width: 135px; 
+}
+
+.completedText:hover {
+  font-weight: bold;
+}
+.checkboxOverride {
+  position: relative;
+  width: 25px;
+  height: 25px;
+}
+
+.checkboxOverride input[type="checkbox"]:checked + label:after {
+  opacity: 1;
+}
+
+.checkboxOverride label {
+  background: #EEEEEE;
+  border: 1px solid #DDDDDD;
+  cursor: pointer;
+  height: 25px;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 25px;
+  cursor: pointer !important;
+
+}
+
+.checkboxOverride label:after {
+  border-style: none none solid solid;
+  content: "";
+  height: 5px;
+  left: 6px;
+  opacity: 0;
+  position: absolute;
+  top: 7px;
+  transform: rotate(-45deg);
+  width: 10px;
+}
+.checkboxWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.checkboxTooltip {
+  position: absolute;
+  top: -30px;
+  right: 0; /* anchor to the right edge of checkbox */
+  transform: translateX(0); /* prevent shifting */
+  background-color: #333;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 10;
+  max-width: max-content;
+}
+
+
+.checkboxWrapper:hover .checkboxTooltip {
+  opacity: 1;
+}
+
+.tooltip-container {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip-text {
+  visibility: hidden;
+  opacity: 0;
+  background-color: #333;
+  color: #fff;
+  text-align: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  position: absolute;
+  
+  /* === Positioning changes === */
+  top: 25px;   /* Place tooltip below the button */
+  right: 15px;     /* Align tooltip to the left of the button */
+  transform: translateX(0); /* No shifting horizontally */
+  
+  white-space: nowrap;
+  z-index: 999;
+  font-size: 12px;
+  transition: opacity 0.2s ease-in-out;
+  pointer-events: none;
+}
+
+.tooltip-container:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
+.addCalbtn, .removeCalbtn {
+  background: transparent;
+  border: none;
+  padding-right: 0px;
+  padding-top: 0px;
+  cursor: pointer;
+  font-size: 20px; /* For the "X" to look nice */
+}
+
+.addCalbtn:hover, .removeCalbtn:hover {
+  background: transparent !important;
+}
+
+.removeCalbtn {
+  text-align: center;
+  color: red; /* optional: make the X red for clarity */
+  width: 39px;
+}
+
+`}</style>
+        </>
+
+    )
+};
+
+export default EventsStyle;
